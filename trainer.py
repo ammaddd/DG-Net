@@ -631,7 +631,7 @@ hyperparameters['teacher_w'] * self.loss_teacher )  )
         print('Resume from iteration %d' % iterations)
         return iterations
 
-    def save(self, snapshot_dir, iterations, num_gpu=1):
+    def save(self, snapshot_dir, iterations, num_gpu=1, experiment=None):
         # Save generators, discriminators, and optimizers
         gen_name = os.path.join(snapshot_dir, 'gen_%08d.pt' % (iterations + 1))
         dis_name = os.path.join(snapshot_dir, 'dis_%08d.pt' % (iterations + 1))
@@ -644,6 +644,10 @@ hyperparameters['teacher_w'] * self.loss_teacher )  )
             torch.save({'a': self.dis_a.state_dict()}, dis_name)
         torch.save({'a': self.id_a.state_dict()}, id_name)
         torch.save({'gen': self.gen_opt.state_dict(), 'id': self.id_opt.state_dict(),  'dis': self.dis_opt.state_dict()}, opt_name)
+        experiment.log_model("dgnet", gen_name)
+        experiment.log_model("dgnet", dis_name)
+        experiment.log_model("dgnet", id_name)
+        experiment.log_model("dgnet", opt_name)
 
 
 
