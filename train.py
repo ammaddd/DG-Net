@@ -2,8 +2,7 @@
 Copyright (C) 2019 NVIDIA Corporation.  All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 """
-from comet_ml import Experiment
-experiment = Experiment(auto_metric_logging=False)
+from comet_utils import CometLogger
 from utils import get_all_data_loaders, prepare_sub_folder, write_loss, get_config, write_2images, Timer
 import argparse
 from trainer import DGNet_Trainer
@@ -26,8 +25,11 @@ parser.add_argument('--name', type=str, default='latest_ablation', help="outputs
 parser.add_argument("--resume", action="store_true")
 parser.add_argument('--trainer', type=str, default='DGNet', help="DGNet")
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
+parser.add_argument('--comet', default=False, type=bool, help='enable comet logging')
 opts = parser.parse_args()
-experiment.log_others(vars(opts))
+
+comet_logger = CometLogger(opts.comet, auto_metric_logging=False)
+comet_logger.log_others(vars(opts))
 
 str_ids = opts.gpu_ids.split(',')
 gpu_ids = []
@@ -45,7 +47,7 @@ else:
 max_iter = config['max_iter']
 display_size = config['display_size']
 config['vgg_model_path'] = opts.output_path
-experiment.log_asset_data(config, "config.yaml")
+comet_logger.log_asset_data(config, "config.yaml")
 
 # Setup model and data loader
 if opts.trainer == 'DGNet':
@@ -111,18 +113,18 @@ while True:
             x_ab, x_ba, s_a, s_b, f_a, f_b, p_a, p_b, pp_a, pp_b, x_a_recon, x_b_recon, x_a_recon_p, x_b_recon_p = \
                                                                                   trainer.forward(images_a, images_b, pos_a, pos_b)
             if (iterations + 1) % 200 == 0:
-                experiment.log_image(images_a[0].detach().cpu().numpy(),
-                                     name="train_images_a",
-                                     image_channels="first", step=iterations+1)
-                experiment.log_image(images_b[0].detach().cpu().numpy(),
-                                     name="train_images_b",
-                                     image_channels="first", step=iterations+1)
-                experiment.log_image(x_ab[0].detach().cpu().numpy(),
-                                     name="x_ab", image_channels="first",
-                                     step=iterations+1)
-                experiment.log_image(x_ba[0].detach().cpu().numpy(),
-                                     name="x_ba", image_channels="first",
-                                     step=iterations+1)
+                comet_logger.log_image(images_a[0].detach().cpu().numpy(),
+                                       name="train_images_a",
+                                       image_channels="first", step=iterations+1)
+                comet_logger.log_image(images_b[0].detach().cpu().numpy(),
+                                       name="train_images_b",
+                                       image_channels="first", step=iterations+1)
+                comet_logger.log_image(x_ab[0].detach().cpu().numpy(),
+                                       name="x_ab", image_channels="first",
+                                       step=iterations+1)
+                comet_logger.log_image(x_ba[0].detach().cpu().numpy(),
+                                       name="x_ba", image_channels="first",
+                                       step=iterations+1)
             if num_gpu>1:
                 trainer.module.dis_update(x_ab.clone(), x_ba.clone(), images_a, images_b, config, num_gpu)
                 trainer.module.gen_update(x_ab, x_ba, s_a, s_b, f_a, f_b, p_a, p_b, pp_a, pp_b, x_a_recon, x_b_recon, x_a_recon_p, x_b_recon_p, images_a, images_b, pos_a, pos_b, labels_a, labels_b, config, iterations, num_gpu)
@@ -136,10 +138,10 @@ while True:
         if (iterations + 1) % config['log_iter'] == 0:
             print("\033[1m Epoch: %02d Iteration: %08d/%08d \033[0m" % (nepoch, iterations + 1, max_iter), end=" ")
             if num_gpu==1:
-                write_loss(iterations, trainer, train_writer, experiment, nepoch)
+                write_loss(iterations, trainer, train_writer, comet_logger, nepoch)
             else:
                 write_loss(iterations, trainer.module, train_writer,
-                           experiment, nepoch)
+                           comet_logger, nepoch)
 
         # Write images
         if (iterations + 1) % config['image_save_iter'] == 0:
@@ -148,9 +150,9 @@ while True:
                     test_image_outputs = trainer.module.sample(test_display_images_a, test_display_images_b)
                 else:
                     test_image_outputs = trainer.sample(test_display_images_a, test_display_images_b)
-            experiment.log_image(test_image_outputs[0][0].detach().cpu().numpy(),
-                                 name="test_image_outputs",
-                                 image_channels="first", step=iterations+1)
+            comet_logger.log_image(test_image_outputs[0][0].detach().cpu().numpy(),
+                                   name="test_image_outputs",
+                                   image_channels="first", step=iterations+1)
             write_2images(test_image_outputs, display_size, image_directory, 'test_%08d' % (iterations + 1))
             del test_image_outputs
 
@@ -168,7 +170,7 @@ while True:
                 trainer.module.save(checkpoint_directory, iterations)
             else:
                 trainer.save(checkpoint_directory, iterations,
-                             experiment=experiment)
+                             comet_logger=comet_logger)
 
         iterations += 1
         if iterations >= max_iter:
@@ -181,5 +183,5 @@ while True:
             trainer.module.save(checkpoint_directory, iterations)
         else:
             trainer.save(checkpoint_directory, iterations,
-                         experiment=experiment)
+                         comet_logger=comet_logger)
 
